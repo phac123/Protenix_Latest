@@ -4,5 +4,5 @@ docker run -it --rm \
   --shm-size=16g \
   -v $(pwd):/workspace \
   -w /workspace \
-  pre_airdd_protenix:latest \
+  liquan_pre_airdd_protenix:latest \
   bash

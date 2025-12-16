@@ -1,25 +1,52 @@
-# Protenix official Dockerfile
+# syntax=docker/dockerfile:1.4
 FROM vemlp-cn-beijing.cr.volces.com/preset-images/pytorch:2.7.1-cu12.6.3-py3.11-ubuntu22.04
 
-ENV DEBIAN_FRONTEND=noninteractive \
-    TZ=Asia/Shanghai \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+# Set default RUN shell to /bin/bash
+SHELL ["/bin/bash", "-cu"]
 
-RUN sed -i.bak 's#http://mirrors.volces.com#https://mirrors.tuna.tsinghua.edu.cn#g' /etc/apt/sources.list && \
-    sed -i 's#http://archive.ubuntu.com#https://mirrors.tuna.tsinghua.edu.cn#g' /etc/apt/sources.list
 
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        g++ \
-        gcc \
-        libc6-dev \
-        make \
-        postgresql \
-    && apt-get clean \
+# Set environment variables
+ENV LANG C.UTF-8
+ENV LC_ALL C.UTF-8
+
+# Install basic packages for compiling and building
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --allow-downgrades --allow-change-held-packages --no-install-recommends \
+    build-essential \
+    cmake \
+    g++-12 \
+    git \
+    git-lfs \
+    curl \
+    wget \
+    ca-certificates \
+    libjpeg-dev \
+    libpng-dev \
+    librdmacm1 \
+    libibverbs1 \
+    ibverbs-providers \
+    tzdata \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    fontconfig \
+    gcc \
+    libc6-dev \
+    make \
+    postgresql \
     && rm -rf /var/lib/apt/lists/*
 
-# Setup TUNA mirror (optional)
+
+# Install Miniconda & use Python 3.11
+ARG python=3.11
+ENV PYTHON_VERSION=${python}
+RUN wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /tmp/install-conda.sh \
+    && chmod +x /tmp/install-conda.sh \
+    && bash /tmp/install-conda.sh -b -f -p /usr/local \
+    && rm -f /tmp/install-conda.sh \
+    && conda install -y python=${PYTHON_VERSION} \
+    && conda clean -y --all
+
+# Configure conda and pip mirrors for faster installation
 RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
 RUN cat <<EOT >> ~/.condarc
 channels:
@@ -42,15 +69,48 @@ custom_channels:
   nvidia: https://mirrors.sustech.edu.cn/anaconda-extra/cloud
 EOT
 
-RUN pip3 install --no-cache-dir \
-    torch==2.7.1 \
+
+# Install Pytorch 2.2
+# you can find other versions and installation commands from:
+# https://pytorch.org/get-started/previous-versions/
+# https://github.com/pytorch/pytorch/wiki/PyTorch-Versions
+# RUN pip install --no-cache-dir \
+#     torch==2.2.1 \
+#     --extra-index-url https://download.pytorch.org/whl/cu118
+ENV TORCH_CUDA_ARCH_LIST="8.0;9.0"
+# Setup TUNA mirror (optional)
+RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
+RUN cat <<EOT >> ~/.condarc
+channels:
+  - defaults
+show_channel_urls: true
+channel_alias: https://mirrors.tuna.tsinghua.edu.cn/anaconda
+default_channels:
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/main
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/free
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/r
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/pro
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/msys2
+custom_channels:
+  conda-forge: https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud
+  msys2: https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud
+  bioconda: https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud
+  menpo: https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud
+  pytorch: https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud
+  simpleitk: https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud
+  nvidia: https://mirrors.sustech.edu.cn/anaconda-extra/cloud
+EOT
+RUN /usr/local/bin/conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main \
+    && /usr/local/bin/conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r \
+    && /usr/local/bin/conda tos accept --override-channels --channel https://conda.anaconda.org/pytorch \
+    && /usr/local/bin/conda tos accept --override-channels --channel https://conda.anaconda.org/conda-forge
+RUN pip install --no-cache-dir \
+    torch==2.7.1 --index-url https://download.pytorch.org/whl/cu126 \
     torchvision==0.22.1 \
     torchaudio==2.7.1
-
 RUN pip3 install --no-cache-dir \
     cuequivariance-ops-torch-cu12==0.6.1 \
     cuequivariance-torch==0.6.1
-
 RUN pip3 --no-cache-dir install \
     scipy==1.16.1 \
     ml_collections==1.1.0 \
@@ -84,12 +144,12 @@ RUN git clone -b v3.5.1 https://github.com/NVIDIA/cutlass.git /opt/cutlass
 ENV CUTLASS_PATH=/opt/cutlass
 
 # for additional dependencies
-COPY ../requirements.txt /tmp/requirements.txt
+COPY requirements.txt /tmp/requirements.txt
 RUN pip3 install --no-cache-dir -r /tmp/requirements.txt
-
 
 COPY . /workspace
 WORKDIR /workspace
 RUN pip3 install --no-cache-dir -e .
-CMD ["bash"]
+RUN pip3 install --no-cache-dir .
 
+CMD ["bash"]
