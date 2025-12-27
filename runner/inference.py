@@ -420,6 +420,7 @@ def run() -> None:
     # update model specific configs
     configs.update(model_specfics_configs)
     configs = update_gpu_compatible_configs(configs)
+    logger.info(f"lq[debug] configs: {configs}")
     logger.info(
         f"Triangle_multiplicative kernel: {configs.triangle_multiplicative}, Triangle_attention kernel: {configs.triangle_attention}"
     )

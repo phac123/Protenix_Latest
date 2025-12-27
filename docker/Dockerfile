@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.4
-FROM vemlp-cn-beijing.cr.volces.com/preset-images/pytorch:2.7.1-cu12.6.3-py3.11-ubuntu22.04
+FROM nvidia/cuda:12.6.1-cudnn-devel-ubuntu22.04
 
 # Set default RUN shell to /bin/bash
 SHELL ["/bin/bash", "-cu"]
@@ -43,32 +43,10 @@ RUN wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -
     && chmod +x /tmp/install-conda.sh \
     && bash /tmp/install-conda.sh -b -f -p /usr/local \
     && rm -f /tmp/install-conda.sh \
+    && conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main \
+    && conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r \
     && conda install -y python=${PYTHON_VERSION} \
     && conda clean -y --all
-
-# Configure conda and pip mirrors for faster installation
-RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
-RUN cat <<EOT >> ~/.condarc
-channels:
-  - defaults
-show_channel_urls: true
-channel_alias: https://mirrors.tuna.tsinghua.edu.cn/anaconda
-default_channels:
-  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/main
-  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/free
-  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/r
-  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/pro
-  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/msys2
-custom_channels:
-  conda-forge: https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud
-  msys2: https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud
-  bioconda: https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud
-  menpo: https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud
-  pytorch: https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud
-  simpleitk: https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud
-  nvidia: https://mirrors.sustech.edu.cn/anaconda-extra/cloud
-EOT
-
 
 # Install Pytorch 2.2
 # you can find other versions and installation commands from:
@@ -147,8 +125,13 @@ ENV CUTLASS_PATH=/opt/cutlass
 COPY requirements.txt /tmp/requirements.txt
 RUN pip3 install --no-cache-dir -r /tmp/requirements.txt
 
+RUN mkdir -p /usr/local/lib/python3.11/site-packages/release_data && chmod 777 $_
+RUN mkdir -p /usr/local/lib/python3.11/site-packages/protenix/model/tri_attention/TriAttentionCache \
+ && chmod -R 777 /usr/local/lib/python3.11/site-packages/protenix/model/tri_attention/TriAttentionCache
+
 COPY . /workspace
 WORKDIR /workspace
+
 RUN pip3 install --no-cache-dir -e .
 RUN pip3 install --no-cache-dir .
 

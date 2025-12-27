@@ -21,7 +21,6 @@ import torch.nn.functional as F
 from protenix.model.modules.primitives import LinearNoBias
 from protenix.model.modules.transformer import AtomAttentionEncoder
 
-
 class InputFeatureEmbedder(nn.Module):
     """
     Implements Algorithm 2 in AF3
