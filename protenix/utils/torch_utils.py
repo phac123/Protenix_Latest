@@ -95,7 +95,7 @@ def eye_mask(L, device=None, opposite=False):
     if opposite:
         return 1.0 - torch.eye(L, device=device)
     else:
-        torch.eye(L, device=device)
+        return torch.eye(L, device=device)
 
 
 def glorot_uniform(t):
@@ -135,7 +135,7 @@ def weights_init(m, bias="zero"):
             _param_init(p, bias)
 
     for name, p in m.named_parameters():
-        if not "." in name:  # top-level parameters
+        if "." not in name:  # top-level parameters
             _param_init(p, bias)
 
 

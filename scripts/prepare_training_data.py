@@ -14,6 +14,7 @@
 
 import argparse
 import csv
+import random
 from pathlib import Path
 from typing import Optional
 
@@ -21,7 +22,7 @@ import pandas as pd
 from joblib import Parallel, delayed
 from tqdm import tqdm
 
-from protenix.data.data_pipeline import DataPipeline
+from protenix.data.pipeline.data_pipeline import DataPipeline
 from protenix.utils.file_io import dump_gzip_pickle
 
 
@@ -78,6 +79,7 @@ def gen_data_from_mmcifs(
         distillation (bool, optional): Flag indicating whether to use the 'Distillation' setting. Defaults to False.
         num_workers (int, optional): Number of parallel workers to use. Defaults to 1.
     """
+    random.shuffle(mmcif_list)
 
     all_sample_indices_list = [
         r

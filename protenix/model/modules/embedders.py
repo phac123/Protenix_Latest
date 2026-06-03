@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, Optional, Union
+from typing import Any, Optional
 
 import torch
 import torch.nn as nn
@@ -20,10 +20,19 @@ import torch.nn.functional as F
 
 from protenix.model.modules.primitives import LinearNoBias
 from protenix.model.modules.transformer import AtomAttentionEncoder
+from protenix.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 class InputFeatureEmbedder(nn.Module):
     """
     Implements Algorithm 2 in AF3
+
+    Args:
+        c_atom (int, optional): atom embedding dim. Defaults to 128.
+        c_atompair (int, optional): atom pair embedding dim. Defaults to 16.
+        c_token (int, optional): token embedding dim. Defaults to 384.
+        esm_configs (dict[str, Any], optional): esm config. Defaults to {}.
     """
 
     def __init__(
@@ -31,14 +40,8 @@ class InputFeatureEmbedder(nn.Module):
         c_atom: int = 128,
         c_atompair: int = 16,
         c_token: int = 384,
-        esm_configs: dict = {},
+        esm_configs: dict[str, Any] = {},
     ) -> None:
-        """
-        Args:
-            c_atom (int, optional): atom embedding dim. Defaults to 128.
-            c_atompair (int, optional): atom pair embedding dim. Defaults to 16.
-            c_token (int, optional): token embedding dim. Defaults to 384.
-        """
         super(InputFeatureEmbedder, self).__init__()
         self.c_atom = c_atom
         self.c_atompair = c_atompair
@@ -106,6 +109,10 @@ class InputFeatureEmbedder(nn.Module):
         )
 
         if self.esm_configs["enable"]:
+            if self.training:
+                logger.warning(
+                    "Make sure esm_token_embedding has been cached for training. If not, refer to protenix/data/esm/compute_esm.py first."
+                )
             # Add esm embedding to s_inputs if enable.
             esm_embeddings = self.linear_esm(input_feature_dict["esm_token_embedding"])
             s_inputs = s_inputs + esm_embeddings
@@ -116,15 +123,14 @@ class InputFeatureEmbedder(nn.Module):
 class RelativePositionEncoding(nn.Module):
     """
     Implements Algorithm 3 in AF3
+
+    Args:
+        r_max (int, optional): Relative position indices clip value. Defaults to 32.
+        s_max (int, optional): Relative chain indices clip value. Defaults to 2.
+        c_z (int, optional): hidden dim [for pair embedding]. Defaults to 128.
     """
 
     def __init__(self, r_max: int = 32, s_max: int = 2, c_z: int = 128) -> None:
-        """
-        Args:
-            r_max (int, optional): Relative position indices clip value. Defaults to 32.
-            s_max (int, optional): Relative chain indices clip value. Defaults to 2.
-            c_z (int, optional): hidden dim [for pair embedding]. Defaults to 128.
-        """
         super(RelativePositionEncoding, self).__init__()
         self.r_max = r_max
         self.s_max = s_max
@@ -209,13 +215,13 @@ class RelativePositionEncoding(nn.Module):
 class FourierEmbedding(nn.Module):
     """
     Implements Algorithm 22 in AF3
+
+    Args:
+        c (int): embedding dim.
+        seed (int, optional): random seed. Defaults to 42.
     """
 
     def __init__(self, c: int, seed: int = 42) -> None:
-        """
-        Args:
-            c (int): embedding dim.
-        """
         super(FourierEmbedding, self).__init__()
         self.c = c
         self.seed = seed
@@ -244,6 +250,14 @@ class FourierEmbedding(nn.Module):
 class SubstructureEmbedder(nn.Module):
     """
     Implements Substructure Embedder
+
+    Args:
+        n_classes (int): Number of distance classes in input
+        c_pair_dim (int): Output pair embedding dimension
+        architecture (str): Either 'mlp' or 'transformer'
+        hidden_dim (int): Hidden dimension for both architectures
+        n_layers (int): Number of layers (MLP or Transformer)
+        dropout (float): Dropout rate
     """
 
     def __init__(
@@ -255,15 +269,6 @@ class SubstructureEmbedder(nn.Module):
         n_layers: int = 3,
         dropout: float = 0.1,
     ) -> None:
-        """
-        Args:
-            n_classes (int): Number of distance classes in input
-            c_pair_dim (int): Output pair embedding dimension
-            architecture (str): Either 'mlp' or 'transformer'
-            hidden_dim (int): Hidden dimension for both architectures
-            n_layers (int): Number of layers (MLP or Transformer)
-            dropout (float): Dropout rate
-        """
         super().__init__()
         self.architecture = architecture.lower()
         if self.architecture == "mlp":
@@ -329,28 +334,26 @@ class SubstructureEmbedder(nn.Module):
 class ConstraintEmbedder(nn.Module):
     """
     Implements Constraint Embedder
+
+    Args:
+        pocket_embedder (dict[str, Any]): pocket embedder config
+        contact_embedder (dict[str, Any]): contact embedder config
+        contact_atom_embedder (dict[str, Any]): contact atom embedder config
+        substructure_embedder (dict[str, Any]): substructure embedder config
+        c_constraint_z (int): constraint z dimension
+        initialize_method (str): initialize method
     """
 
     def __init__(
         self,
-        pocket_embedder: dict[str:int],
-        contact_embedder: dict[str:int],
-        contact_atom_embedder: dict[str:int],
-        substructure_embedder: dict[str:int],
+        pocket_embedder: dict[str, Any],
+        contact_embedder: dict[str, Any],
+        contact_atom_embedder: dict[str, Any],
+        substructure_embedder: dict[str, Any],
         c_constraint_z: int,
         initialize_method: str = "zero",
-        **kwarg,
+        **kwargs: Any,
     ) -> None:
-        """
-
-        Args:
-            pocket_embedder (dict[str:int]): pocket embedder config
-            contact_embedder (dict[str:int]): contact embedder config
-            contact_atom_embedder (dict[str:int]): contact atom embedder config
-            substructure_embedder (dict[str:int]): substructure embedder config
-            c_constraint_z (int): constraint z dimension
-            initialize_method (str): initialize method
-        """
         super(ConstraintEmbedder, self).__init__()
         self.pocket_embedder_config = pocket_embedder
         self.contact_embedder_config = contact_embedder
@@ -395,12 +398,12 @@ class ConstraintEmbedder(nn.Module):
 
     def forward(
         self,
-        constraint_feature_dict: dict[str, Union[torch.Tensor, int, float, dict]],
+        constraint_feature_dict: dict[str, Any],
     ) -> torch.Tensor:
         """
 
         Args:
-            constraint_feature_dict (dict[str, Union[torch.Tensor, int, float, dict]]): dict of input features
+            constraint_feature_dict (dict[str, Any]): dict of input features
 
         Returns:
             torch.Tensor: token embedding

@@ -20,23 +20,99 @@
 # version: v{x}.{y}.{z}
 
 """
-Currently, the model_name support the following models.
+# Currently, the following models are supported. Unless specified otherwise,
+# models are trained based on the 2021-09-30 wwPDB cutoff.
 
-|           Model Name                |    ESM/MSA/Constraint    | Model Parameters(M ) |
-|-------------------------------------|--------------------------|----------------------|
-| `protenix_base_default_v0.5.0`      |      ❌ / ✅ / ❌         |         368.09       |
-| `protenix_base_constraint_v0.5.0`   |      ❌ / ✅ / ✅         |         368.30       |
-| `protenix_mini_esm_v0.5.0`          |      ✅ / ✅ / ❌         |         135.22       |
-| `protenix_mini_ism_v0.5.0`          |      ✅ / ✅ / ❌         |         135.22       |
-| `protenix_mini_default_v0.5.0`      |      ❌ / ✅ / ❌         |         134.06       |
-| `protenix_tiny_default_v0.5.0`      |      ❌ / ✅ / ❌         |         109.50       |
+|           Model Name                |  ESM/MSA/Constraint/RNA MSA/Template | Model Parameters (M) |
+|-------------------------------------|--------------------------------------|----------------------|
+| `protenix_base_default_v0.5.0`      |      ❌ / ✅ / ❌ / ❌ / ❌            |         368.09       |
+| `protenix_base_constraint_v0.5.0`   |      ❌ / ✅ / ✅ / ❌ / ❌            |         368.30       |
+| `protenix_mini_esm_v0.5.0`          |      ✅ / ✅ / ❌ / ❌ / ❌            |         135.22       |
+| `protenix_mini_ism_v0.5.0`          |      ✅ / ✅ / ❌ / ❌ / ❌            |         135.22       |
+| `protenix_mini_default_v0.5.0`      |      ❌ / ✅ / ❌ / ❌ / ❌            |         134.06       |
+| `protenix_tiny_default_v0.5.0`      |      ❌ / ✅ / ❌ / ❌ / ❌            |         109.50       |
+
+# The following models support inference with templates and RNA MSA.
+# Format: protenix_{model_size}_{features}_{version}
+| `protenix_base_default_v1.0.0`      |      ❌ / ✅ / ❌ / ✅ / ✅            |         368.48       |
+
+# For practical application scenarios, `protenix_base_20250630_v1.0.0` is trained based on the 2025-06-30 wwPDB cutoff
+# and is also released to the community.
+# For fair benchmarks of model improvements across different versions, please use `protenix_base_default_v1.0.0`.
+
+| `protenix_base_20250630_v1.0.0`     |      ❌ / ✅ / ❌ / ✅ / ✅            |         368.48       |
+
+# Scaled-up models
+| `protenix-v2`       |      ❌ / ✅ / ❌ / ✅ / ✅            |         464.44       |
+
+
+
 """
 model_configs = {
+    "protenix-v2": {
+        "c_z": 256,
+        "diffusion_batch_size": 64,
+        "model": {
+            "N_cycle": 10,
+            "relative_position_encoding": {
+                "c_z": 256,
+            },
+            "template_embedder": {
+                "c_z": 256,
+                "n_blocks": 2,
+                "hidden_scale_up": True,
+            },
+            "msa_module": {
+                "c_m": 128,
+                "c_z": 256,
+                "hidden_scale_up": True,
+            },
+            "pairformer": {
+                "c_z": 256,
+                "hidden_scale_up": True,
+            },
+            "diffusion_module": {
+                "c_z": 256,
+            },
+            "confidence_head": {
+                "c_z": 256,
+                "hidden_scale_up": True,
+            },
+            "distogram_head": {
+                "c_z": 256,
+            },
+        },
+        "sample_diffusion": {
+            "N_step": 200,
+        },
+    },
+    "protenix_base_default_v1.0.0": {
+        "model": {
+            "N_cycle": 10,
+            "template_embedder": {
+                "n_blocks": 2,
+            },
+        },
+        "sample_diffusion": {
+            "N_step": 200,
+        },  # the default inference setting for base model
+    },
+    "protenix_base_20250630_v1.0.0": {
+        "model": {
+            "N_cycle": 10,
+            "template_embedder": {
+                "n_blocks": 2,
+            },
+        },
+        "sample_diffusion": {
+            "N_step": 200,
+        },  # the default inference setting for base model
+    },
     "protenix_base_default_v0.5.0": {
         "model": {"N_cycle": 10},
         "sample_diffusion": {
             "N_step": 200,
-        },  # the default setting for base model
+        },  # the default inference setting for base model
     },
     "protenix_base_constraint_v0.5.0": {
         "model": {
@@ -101,6 +177,10 @@ model_configs = {
                     "enable": True,
                 },
             },
+        },
+        "esm": {
+            "enable": True,
+            "model_name": "esm2-3b",
         },
         "load_strict": False,  # If finetuning from base model, model arch has been changed,
         # it should be False, for inference, it should be True.

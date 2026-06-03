@@ -51,7 +51,7 @@ basic_configs = {
     "ema_decay": -1.0,
     "eval_ema_only": False,  # whether wandb only tracking ema checkpoint metrics
     "ema_mutable_param_keywords": [""],
-    "model_name": "protenix_base_default_v0.5.0",  # train model name
+    "model_name": "protenix_base_default_v1.0.0",  # train model name
 }
 data_configs = {
     # Data
@@ -106,6 +106,8 @@ finetune_optim_configs = {
     "decay_every_n_steps": 50000,
 }
 model_configs = {
+    "mc_dropout_apply_rate": 0.4,
+    "mc_dropout_rate": 0.4,
     # Model
     "c_s": 384,
     "c_z": 128,
@@ -122,9 +124,10 @@ model_configs = {
     "blocks_per_ckpt": ValueMaybeNone(
         1
     ),  # NOTE: Number of blocks in each activation checkpoint, if None, no checkpointing is performed.
+    "hidden_scale_up": False,  # whether to scale up hidden dim in pairformer and confidence head
     # switch of kernels
     "triangle_multiplicative": "cuequivariance",  # cuequivariance, torch
-    "triangle_attention": "triattention",  # triattention, cuequivariance, deepspeed, torch
+    "triangle_attention": "cuequivariance",  # triattention, cuequivariance, deepspeed, torch
     "enable_diffusion_shared_vars_cache": False,
     "enable_efficient_fusion": False,
     "enable_tf32": False,
@@ -133,7 +136,10 @@ model_configs = {
     "loss_metrics_sparse_enable": True,  # the swicth for both sparse lddt metrics and sparse bond/smooth lddt loss
     "skip_amp": {
         "sample_diffusion": True,
-        "confidence_head": True,
+        # If confidence_head (below) set to True and triangle_attention set to cuequivariance,
+        # RuntimeError: ERROR: Full precision FP32 backward pass for triangle attention is not
+        # implemented yet! Please set torch.backends.cuda.matmul.allow_tf32=True.
+        "confidence_head": False,
         "sample_diffusion_training": True,
         "loss": True,
     },
@@ -141,6 +147,13 @@ model_configs = {
         "chunk_size": ValueMaybeNone(
             256
         ),  # should set to null for normal training and small dataset eval [for efficiency]
+        "dynamic_chunk_size": True,
+        "chunk_size_thresholds": {
+            "1024": -1,  # -1 means no chunking (equivalent to None)
+            "1536": 512,
+            "2048": 256,
+            "2560": 128,
+        },
         "sample_diffusion_chunk_size": ValueMaybeNone(
             5
         ),  # should set to null for normal training and small dataset eval [for efficiency]
@@ -169,6 +182,67 @@ model_configs = {
         "N_sample": 5,
         "N_step_mini_rollout": 20,
         "N_sample_mini_rollout": 1,
+        "guidance": {
+            # config for Training-Free Guidance (TFG).
+            "enable": False,
+            "log_last_step_energy": True,
+            "rho": 0.0,
+            "mu": 0.1,
+            "mc": {
+                "std": 0.0,
+                "batch": 1,
+            },
+            "steps": {
+                "tfg_outer": 1,
+                "tfg_inner": 20,
+                "projection_outer": 2,
+                "projection_inner": 10,
+            },
+            "terms": {
+                "VinaStericPotential": {
+                    "interval": 1,
+                    "weight": 0.1,
+                    "buffer": 0.225,
+                },
+                "ExperimentalTorsionPotential": {
+                    "interval": 1,
+                    "weight": 0.0015,
+                },
+                "InterchainBondPotential": {
+                    "interval": 1,
+                    "weight": 0.15,
+                    "buffer": 2.0,
+                },
+                "PairwiseDistancePotential": {
+                    "interval": 1,
+                    "weight": 0.5,
+                    "enable_projection": True,
+                    "bond_buffer": 0.00,
+                    "angle_buffer": 0.00,
+                    "clash_buffer": 0.00,
+                },
+                "ChiralAtomPotential": {
+                    "interval": 1,
+                    "weight": 0.0,
+                    "enable_projection": True,
+                    "buffer": 0.6155,
+                },
+                "StereoBondPotential": {
+                    "interval": 1,
+                    "weight": 0.25,
+                    "buffer": 0.52360,
+                },
+                "PlanarImproperPotential": {
+                    "interval": 1,
+                    "weight": 0.12,
+                },
+                "LinearBondPotential": {
+                    "interval": 1,
+                    "weight": 0.25,
+                    "buffer": 0.08726646259,
+                },
+            },
+        },
     },
     "model": {
         "N_model_seed": 1,  # for inference
@@ -191,6 +265,7 @@ model_configs = {
             "n_blocks": 0,
             "dropout": 0.25,
             "blocks_per_ckpt": GlobalConfigValue("blocks_per_ckpt"),
+            "hidden_scale_up": GlobalConfigValue("hidden_scale_up"),
         },
         "msa_module": {
             "c_m": 64,
@@ -200,7 +275,9 @@ model_configs = {
             "msa_dropout": 0.15,
             "pair_dropout": 0.25,
             "blocks_per_ckpt": GlobalConfigValue("blocks_per_ckpt"),
+            "hidden_scale_up": GlobalConfigValue("hidden_scale_up"),
             "msa_chunk_size": ValueMaybeNone(2048),
+            "msa_max_size": 16384,
         },
         # Optional constraint embedder, only used when constraint is enabled.
         "constraint_embedder": {
@@ -236,6 +313,7 @@ model_configs = {
             "n_heads": 16,
             "dropout": 0.25,
             "blocks_per_ckpt": GlobalConfigValue("blocks_per_ckpt"),
+            "hidden_scale_up": GlobalConfigValue("hidden_scale_up"),
         },
         "diffusion_module": {
             "use_fine_grained_checkpoint": True,
@@ -268,6 +346,7 @@ model_configs = {
             "max_atoms_per_token": GlobalConfigValue("max_atoms_per_token"),
             "pairformer_dropout": 0.0,
             "blocks_per_ckpt": GlobalConfigValue("blocks_per_ckpt"),
+            "hidden_scale_up": GlobalConfigValue("hidden_scale_up"),
             "distance_bin_start": 3.25,
             "distance_bin_end": 52.0,
             "distance_bin_step": 1.25,
@@ -314,7 +393,7 @@ loss_configs = {
     "loss": {
         "diffusion_lddt_chunk_size": ValueMaybeNone(1),
         "diffusion_bond_chunk_size": ValueMaybeNone(1),
-        "diffusion_chunk_size_outer": ValueMaybeNone(-1),
+        "diffusion_chunk_size_outer": ValueMaybeNone(1),
         "diffusion_sparse_loss_enable": GlobalConfigValue("loss_metrics_sparse_enable"),
         "diffusion_lddt_loss_dense": True,  # only set true in initial training for training speed
         "resolution": {"min": 0.1, "max": 4.0},
